@@ -6,7 +6,7 @@ pipeline {
 
   //Opciones específicas de Pipeline dentro del Pipeline
   options {
-    	buildDiscarder(logRotator(numToKeepStr: '3'))
+    buildDiscarder(logRotator(numToKeepStr: '3'))
  	disableConcurrentBuilds()
   }
 
@@ -26,28 +26,30 @@ pipeline {
 */
 
   //Aquí comienzan los “items” del Pipeline
-stage('Checkout'){
-	steps{
-		echo "------------>Checkout<------------"
-		checkout([
-				$class: 'GitSCM', 
-					branches: [[name: '*/master']], 
-					doGenerateSubmoduleConfigurations: false, 
-					extensions: [], 
-					gitTool: 'Default', 
-					submoduleCfg: [], 
-					userRemoteConfigs: [[
-					credentialsId: 'GitHub_xiomara.florez', 
-					url:'https://github.com/PruebasVarias-Dev/SupermercadoWeb.git'
-															]]
-					])
-			}
-							}
-    
+  stages{
+    stage('Checkout') {
+      steps{
+        echo "------------>Checkout<------------"
+        checkout([
+            $class: 'GitSCM',
+            branches: [[name: '*/master']],
+            doGenerateSubmoduleConfigurations: false,
+            extensions: [],
+            gitTool: 'Default',
+            submoduleCfg: [],
+            userRemoteConfigs: [[
+                credentialsId: 'GitHub_xiomara.florez',
+                url:'https://github.com/PruebasVarias-Dev/SupermercadoWeb'
+            ]]
+        ])
+      }
+    }
+
     stage('Compile & Unit Tests') {
       steps{
-        echo "------------>Compile & Unit Tests<------------"
-
+        echo "------------>**Compile & Unit Tests**<------------"
+        sh 'chmod +x gradlew'
+        sh './gradlew --b ./build.gradle clean test'
       }
     }
 
@@ -55,7 +57,7 @@ stage('Checkout'){
       steps{
         echo '------------>Análisis de código estático<------------'
         withSonarQubeEnv('Sonar') {
-sh "${tool name: 'SonarScanner', type:'hudson.plugins.sonar.SonarRunnerInstallation'}/bin/sonar-scanner -Dproject.settings=sonar-project.properties"
+            sh "${tool name: 'SonarScanner', type:'hudson.plugins.sonar.SonarRunnerInstallation'}/bin/sonar-scanner"
         }
       }
     }
@@ -63,8 +65,10 @@ sh "${tool name: 'SonarScanner', type:'hudson.plugins.sonar.SonarRunnerInstallat
     stage('Build') {
       steps {
         echo "------------>Build<------------"
+        //Construir sin tarea test que se ejecutó previamente
+        sh './gradlew --b ./build.gradle build -x test'
       }
-    }  
+    }
   }
 
   post {
@@ -73,9 +77,11 @@ sh "${tool name: 'SonarScanner', type:'hudson.plugins.sonar.SonarRunnerInstallat
     }
     success {
       echo 'This will run only if successful'
+      junit 'build/test-results/test/*.xml' //RUTA DE TUS ARCHIVOS .XML
     }
     failure {
       echo 'This will run only if failed'
+      mail (to: 'xiomara.florez@ceiba.com.co',subject: "Failed Pipeline:${currentBuild.fullDisplayName}",body: "Something is wrong with ${env.BUILD_URL}")
     }
     unstable {
       echo 'This will run only if the run was marked as unstable'
